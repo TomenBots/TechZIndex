@@ -1,19 +1,18 @@
 from streamer import media_streamer
+import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
 from bot import get_image, get_posts, rm_cache
+from utils.tgstreamer import work_loads, multi_clients
 from html_gen import posts_html
-from pyrogram.client import Client
+from pyrogram import Client, idle
 from config import *
+import asyncio
+
+from aiohttp import web
 from pyrogram import filters
 from pyrogram.types import Message
 
-user = Client(
-    "userbot",
-    api_id=int(API_ID),
-    api_hash=API_HASH,
-    session_string=STRING_SESSION,
-)
 
 
 app = FastAPI(docs_url=None, redoc_url=None)
@@ -90,7 +89,6 @@ async def stream_api(channel, id, request: Request):
 
 @app.on_event("startup")
 async def startup():
-    global aiosession
     print("Starting Server")
 
     app.router.add_get("/", home)
@@ -101,10 +99,11 @@ async def startup():
     app.router.add_get("/static/{file}", static_files)
     app.router.add_get("/api/thumb/{channel}/{id}", get_thumb)
 
+    server = web.AppRunner(app)
+
 
     print("Starting TG Clients...")
     loop.create_task(generate_clients())
-    await user.start()
     print("TG Clients Started")
     print("========================================")
     print("TechZIndex Started Successfully")
