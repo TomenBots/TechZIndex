@@ -14,12 +14,7 @@ user = Client(
     api_hash=API_HASH,
     session_string=STRING_SESSION,
 )
-bot = Client(
-    "techzindexbot",
-    api_id=int(API_ID),
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-)
+
 
 app = FastAPI(docs_url=None, redoc_url=None)
 
@@ -29,12 +24,12 @@ with open("templates/stream.html") as f:
     STREAM_HTML = f.read()
 
 
-@app.get("/")
+
 async def home():
     return RedirectResponse(HOME_PAGE_REDIRECT)
 
 
-@app.get("/channel/{channel}")
+
 async def channel(channel):
     posts = await get_posts(user, str(channel).lower())
     phtml = posts_html(posts, channel)
@@ -43,14 +38,14 @@ async def channel(channel):
     )
 
 
-@app.get("/api/posts/{channel}/{page}")
+
 async def get_posts_api(channel, page: str):
     posts = await get_posts(user, str(channel).lower(), page)
     phtml = posts_html(posts, channel)
     return {"html": phtml}
 
 
-@app.get("/static/{file}")
+
 async def static_files(file):
     return FileResponse(f"static/{file}")
 
@@ -61,31 +56,68 @@ async def get_thumb(channel, id):
     return FileResponse(img, media_type="image/jpeg")
 
 
+
+async def generate_clients():
+    global multi_clients, work_loads
+
+    print("Generating Clients")
+
+    for i in range(len(BOT_TOKENS)):
+        bot = Client(
+            f"bot{i}",
+            api_id=API_KEY,
+            api_hash=API_HASH,
+            bot_token=BOT_TOKENS[i],
+        )
+        await bot.start()
+        multi_clients[i] = bot
+        work_loads[i] = 0
+        print(f"Client {i} generated")
+
+
+
+
+async def stream(channel, id):
+    return HTMLResponse(
+        STREAM_HTML.replace("URL", f"{BASE_URL}/api/stream/{channel}/{id}")
+    )
+
+async def stream_api(channel, id, request: Request):
+    return await media_streamer(bot, channel, id, request)
+
+
+
+
 @app.on_event("startup")
 async def startup():
+    global aiosession
+    print("Starting Server")
+
+    app.router.add_get("/", home)
+    app.router.add_get("/channel/{channel}", channel)
+    app.router.add_get("/api/stream/{channel}/{id}", stream_api)
+    app.router.add_get("/stream/{channel}/{id}", stream)
+    app.router.add_get("/api/posts/{channel}/{page}", get_posts_api)
+    app.router.add_get("/static/{file}", static_files)
+    app.router.add_get("/api/thumb/{channel}/{id}", get_thumb)
+
+
     print("Starting TG Clients...")
-    await bot.start()
+    loop.create_task(generate_clients())
     await user.start()
     print("TG Clients Started")
     print("========================================")
     print("TechZIndex Started Successfully")
     print("Made By TechZBots | TechShreyash")
     print("========================================")
+    await server.setup()
+    print("Server Started")
+    await web.TCPSite(server).start()
+    await idle()
 
 
 # Streamer
 
-
-@app.get("/stream/{channel}/{id}")
-async def stream(channel, id):
-    return HTMLResponse(
-        STREAM_HTML.replace("URL", f"{BASE_URL}/api/stream/{channel}/{id}")
-    )
-
-
-@app.get("/api/stream/{channel}/{id}")
-async def stream_api(channel, id, request: Request):
-    return await media_streamer(bot, channel, id, request)
 
 
 # bot commands
@@ -128,3 +160,9 @@ async def clean_cache(_, msg: Message):
         await msg.reply_text(
             "You are not my owner\n\nContact [Owner](tg://user?id={OWNER_ID})  If You Want To Update Your Site\n\nRead : https://t.me/TechZBots/524"
         )
+
+
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(startup())
